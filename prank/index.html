@@ -1,0 +1,928 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="纯静态扫雷游戏 — 原生 HTML/CSS/JS，无框架无依赖，可直接部署到 GitHub Pages">
+<title>扫雷 Minesweeper</title>
+<style>
+/* ==========================================================================
+   配色：优先使用 DeepSeek Harness 的主题变量（--dsw-alias-*）。
+   本文件不重新定义任何 --dsw-* 变量，只提供 --ms-* 兜底值，
+   因此嵌入 DSH 时自动跟随 DSH 明暗主题，独立打开时使用内置明暗主题。
+   ========================================================================== */
+:root{
+  --ms-page:#f9fafb;
+  --ms-surface:#ffffff;
+  --ms-surface-2:#f2f4f7;
+  --ms-cover-top:#eaeef5;
+  --ms-cover-bottom:#d8dee9;
+  --ms-cover-hover-top:#e2e8f2;
+  --ms-cover-hover-bottom:#cfd7e4;
+  --ms-open:#ffffff;
+  --ms-open-line:rgba(15,17,21,.06);
+  --ms-text:#0f1115;
+  --ms-text-dim:#61666b;
+  --ms-text-faint:#81858c;
+  --ms-line:rgba(15,17,21,.12);
+  --ms-line-soft:rgba(15,17,21,.07);
+  --ms-accent:#4176e6;
+  --ms-accent-soft:#e9f0ff;
+  --ms-danger:#ec1313;
+  --ms-danger-soft:#fee2e2;
+  --ms-success:#16a34a;
+  --ms-warn:#f7ad31;
+  --ms-shadow:0 1px 2px rgba(15,17,21,.10);
+  --ms-shadow-lg:0 8px 24px rgba(15,17,21,.08);
+  --ms-n1:#1a56db; --ms-n2:#15803d; --ms-n3:#dc2626; --ms-n4:#6d28d9;
+  --ms-n5:#b45309; --ms-n6:#0d9488; --ms-n7:#111827; --ms-n8:#6b7280;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ms-page:#151517; --ms-surface:#232324; --ms-surface-2:#2c2c2e;
+    --ms-cover-top:#3c3d42; --ms-cover-bottom:#2b2c2f;
+    --ms-cover-hover-top:#484a50; --ms-cover-hover-bottom:#333438;
+    --ms-open:#1b1b1c; --ms-open-line:rgba(255,255,255,.05);
+    --ms-text:#f9fafb; --ms-text-dim:#adb2b8; --ms-text-faint:#81858c;
+    --ms-line:rgba(255,255,255,.16); --ms-line-soft:rgba(255,255,255,.08);
+    --ms-accent:#4d93f8; --ms-accent-soft:#22304a;
+    --ms-danger:#f25a5a; --ms-danger-soft:#3c1f1b;
+    --ms-success:#4ed17e; --ms-warn:#f7ad31;
+    --ms-shadow:0 1px 2px rgba(0,0,0,.45);
+    --ms-shadow-lg:0 8px 24px rgba(0,0,0,.45);
+    --ms-n1:#7aaaff; --ms-n2:#4ed17e; --ms-n3:#f25a5a; --ms-n4:#c4b5fd;
+    --ms-n5:#f7ad31; --ms-n6:#2dd4bf; --ms-n7:#ededed; --ms-n8:#a2a4a6;
+  }
+}
+:root[data-theme="dark"],
+body[data-ds-dark-theme]{
+  --ms-page:#151517; --ms-surface:#232324; --ms-surface-2:#2c2c2e;
+  --ms-cover-top:#3c3d42; --ms-cover-bottom:#2b2c2f;
+  --ms-cover-hover-top:#484a50; --ms-cover-hover-bottom:#333438;
+  --ms-open:#1b1b1c; --ms-open-line:rgba(255,255,255,.05);
+  --ms-text:#f9fafb; --ms-text-dim:#adb2b8; --ms-text-faint:#81858c;
+  --ms-line:rgba(255,255,255,.16); --ms-line-soft:rgba(255,255,255,.08);
+  --ms-accent:#4d93f8; --ms-accent-soft:#22304a;
+  --ms-danger:#f25a5a; --ms-danger-soft:#3c1f1b;
+  --ms-success:#4ed17e; --ms-warn:#f7ad31;
+  --ms-shadow:0 1px 2px rgba(0,0,0,.45);
+  --ms-shadow-lg:0 8px 24px rgba(0,0,0,.45);
+  --ms-n1:#7aaaff; --ms-n2:#4ed17e; --ms-n3:#f25a5a; --ms-n4:#c4b5fd;
+  --ms-n5:#f7ad31; --ms-n6:#2dd4bf; --ms-n7:#ededed; --ms-n8:#a2a4a6;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  min-height:100vh;
+  background:var(--dsw-alias-bg-base,var(--ms-page));
+  color:var(--dsw-alias-label-primary,var(--ms-text));
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  -webkit-text-size-adjust:100%;
+  -webkit-tap-highlight-color:transparent;
+  display:flex;
+  justify-content:center;
+  padding:16px 12px 28px;
+}
+.app{width:100%;max-width:1020px;display:flex;flex-direction:column;gap:12px}
+
+/* ---------- 头部 ---------- */
+.head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.title{margin:0;font-size:20px;font-weight:600;letter-spacing:.5px;display:flex;align-items:center;gap:8px}
+.title small{font-size:12px;font-weight:400;color:var(--dsw-alias-label-tertiary,var(--ms-text-faint))}
+.seg{display:flex;gap:4px;padding:3px;border-radius:10px;
+  background:var(--dsw-alias-bg-overlay,var(--ms-surface-2));border:1px solid var(--dsw-alias-border-l2,var(--ms-line-soft))}
+.seg button{
+  font:inherit;font-size:13px;line-height:1;padding:8px 12px;border:0;border-radius:8px;cursor:pointer;
+  background:transparent;color:var(--dsw-alias-label-secondary,var(--ms-text-dim));
+  transition:background-color .12s,color .12s;white-space:nowrap;
+}
+.seg button:hover{background:var(--dsw-alias-interactive-bg-hover,var(--ms-line-soft))}
+.seg button.active{
+  background:var(--dsw-alias-state-business-primary,var(--ms-accent));
+  color:var(--dsw-alias-label-primary-foreground,#fff);font-weight:600;
+}
+.seg button:focus-visible,.icon-btn:focus-visible,.restart:focus-visible,.flag-mode:focus-visible{
+  outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary,var(--ms-accent)));
+  outline-offset:2px;
+}
+.icon-btn{
+  font:inherit;font-size:13px;padding:8px 12px;border-radius:10px;cursor:pointer;
+  background:var(--dsw-alias-bg-overlay,var(--ms-surface-2));
+  color:var(--dsw-alias-label-secondary,var(--ms-text-dim));
+  border:1px solid var(--dsw-alias-border-l2,var(--ms-line-soft));
+}
+.icon-btn:hover{background:var(--dsw-alias-interactive-bg-hover,var(--ms-line-soft))}
+
+/* ---------- 状态栏 ---------- */
+.hud{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:10px 12px;border-radius:12px;
+  background:var(--dsw-alias-bg-layer-2,var(--ms-surface));
+  border:1px solid var(--dsw-alias-border-l2,var(--ms-line-soft));
+  box-shadow:var(--ms-shadow);
+}
+.counter{
+  display:flex;align-items:baseline;gap:6px;
+  font-variant-numeric:tabular-nums;
+}
+.counter .k{font-size:12px;color:var(--dsw-alias-label-tertiary,var(--ms-text-faint))}
+.counter .v{
+  font-family:var(--ds-font-family-code,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);
+  font-size:18px;font-weight:700;letter-spacing:1px;
+  color:var(--dsw-alias-label-primary,var(--ms-text));min-width:3.2ch;text-align:right;
+}
+.counter.mines .v{color:var(--dsw-alias-state-error-primary,var(--ms-danger))}
+.counter.time .v{color:var(--dsw-alias-state-business-primary,var(--ms-accent))}
+.status{
+  flex:1 1 200px;min-width:150px;font-size:13px;line-height:1.5;
+  color:var(--dsw-alias-label-secondary,var(--ms-text-dim));
+  padding:6px 10px;border-radius:8px;
+  background:var(--dsw-alias-bg-overlay,var(--ms-surface-2));
+  text-align:center;
+}
+.status[data-state="win"]{
+  color:var(--dsw-alias-state-success-primary,var(--ms-success));font-weight:600;
+  background:color-mix(in srgb,var(--dsw-alias-state-success-primary,var(--ms-success)) 12%,transparent);
+}
+.status[data-state="lose"]{
+  color:var(--dsw-alias-state-error-primary,var(--ms-danger));font-weight:600;
+  background:color-mix(in srgb,var(--dsw-alias-state-error-primary,var(--ms-danger)) 12%,transparent);
+}
+.status[data-state="run"]{color:var(--dsw-alias-label-tertiary,var(--ms-text-faint))}
+.restart{
+  font:inherit;font-size:13px;font-weight:600;padding:9px 16px;border-radius:10px;cursor:pointer;
+  border:1px solid var(--dsw-alias-border-l3,var(--ms-line));
+  background:var(--dsw-alias-state-business-primary,var(--ms-accent));
+  color:var(--dsw-alias-label-primary-foreground,#fff);
+  transition:filter .12s,transform .06s;
+  white-space:nowrap;
+}
+.restart:hover{filter:brightness(1.08)}
+.restart:active{transform:translateY(1px)}
+.cancel-jump{
+  font:inherit;font-size:13px;font-weight:600;padding:9px 14px;border-radius:10px;cursor:pointer;
+  border:1px solid var(--dsw-alias-border-l3,var(--ms-line));
+  background:var(--dsw-alias-bg-overlay,var(--ms-surface-2));
+  color:var(--dsw-alias-label-secondary,var(--ms-text-dim));
+  white-space:nowrap;transition:background-color .12s;
+}
+.cancel-jump:hover{background:var(--dsw-alias-interactive-bg-hover,var(--ms-line-soft))}
+.cancel-jump[hidden]{display:none}
+@keyframes ms-jump-pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.status[data-state="lose"][data-jumping="1"]{animation:ms-jump-pulse 1s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.status[data-jumping="1"]{animation:none}}
+
+/* ---------- 棋盘 ---------- */
+.board-wrap{
+  overflow:auto;-webkit-overflow-scrolling:touch;
+  display:flex;justify-content:center;
+  padding:4px 0 6px;
+}
+.board{
+  --gap:2px;--cell:30px;
+  display:grid;
+  grid-template-columns:repeat(var(--cols,9),var(--cell));
+  grid-auto-rows:var(--cell);
+  gap:var(--gap);
+  padding:8px;
+  border-radius:12px;
+  background:var(--dsw-alias-bg-layer-1,var(--ms-surface));
+  border:1px solid var(--dsw-alias-border-l3,var(--ms-line));
+  box-shadow:var(--ms-shadow-lg);
+  user-select:none;-webkit-user-select:none;
+  -webkit-touch-callout:none;
+  margin:0 auto;
+}
+.cell{
+  display:flex;align-items:center;justify-content:center;
+  width:var(--cell);height:var(--cell);
+  border-radius:4px;
+  font-size:calc(var(--cell) * .58);
+  font-weight:700;line-height:1;
+  font-family:var(--ds-font-family-code,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);
+  cursor:pointer;
+  touch-action:manipulation;
+  transition:background-color .08s,transform .06s;
+  overflow:hidden;
+}
+.cell.cover{
+  background-image:linear-gradient(180deg,var(--ms-cover-top),var(--ms-cover-bottom));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.55),inset 0 -1px 0 rgba(0,0,0,.10),var(--ms-shadow);
+  color:transparent;
+}
+body[data-ds-dark-theme] .cell.cover,
+:root[data-theme="dark"] .cell.cover{
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.10),inset 0 -1px 0 rgba(0,0,0,.35),var(--ms-shadow);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .cell.cover{
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.10),inset 0 -1px 0 rgba(0,0,0,.35),var(--ms-shadow);
+  }
+}
+@media (hover:hover){
+  .cell.cover:hover{
+    background-image:linear-gradient(180deg,var(--ms-cover-hover-top),var(--ms-cover-hover-bottom));
+  }
+}
+.cell.cover:active{transform:scale(.96)}
+.cell.open{
+  background:var(--dsw-alias-bg-base,var(--ms-open));
+  box-shadow:inset 0 0 0 1px var(--ms-open-line);
+  cursor:default;
+}
+.cell.open:active{transform:none}
+.cell.n1{color:var(--ms-n1)}
+.cell.n2{color:var(--ms-n2)}
+.cell.n3{color:var(--ms-n3)}
+.cell.n4{color:var(--ms-n4)}
+.cell.n5{color:var(--ms-n5)}
+.cell.n6{color:var(--ms-n6)}
+.cell.n7{color:var(--ms-n7)}
+.cell.n8{color:var(--ms-n8)}
+.cell.flag{
+  background-image:linear-gradient(180deg,var(--ms-cover-top),var(--ms-cover-bottom));
+  font-size:calc(var(--cell) * .62);
+}
+.cell.flag.wrong{
+  background:var(--ms-danger-soft);
+  box-shadow:inset 0 0 0 1px var(--dsw-alias-state-error-primary,var(--ms-danger));
+}
+.cell.mine{
+  background:var(--dsw-alias-bg-overlay,var(--ms-surface-2));
+  font-size:calc(var(--cell) * .62);
+}
+.cell.exploded{
+  background:var(--dsw-alias-state-error-primary,var(--ms-danger));
+}
+.cell.hint-flash{box-shadow:inset 0 0 0 2px var(--dsw-alias-state-business-primary,var(--ms-accent))}
+
+/* ---------- 底部 ---------- */
+.foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.hint{
+  margin:0;font-size:12px;line-height:1.7;
+  color:var(--dsw-alias-label-tertiary,var(--ms-text-faint));
+}
+.hint kbd{
+  font-family:var(--ds-font-family-code,ui-monospace,monospace);
+  font-size:11px;padding:1px 5px;border-radius:4px;
+  background:var(--dsw-alias-bg-overlay,var(--ms-surface-2));
+  border:1px solid var(--dsw-alias-border-l2,var(--ms-line-soft));
+}
+.flag-mode{
+  font:inherit;font-size:13px;padding:8px 14px;border-radius:10px;cursor:pointer;
+  background:var(--dsw-alias-bg-overlay,var(--ms-surface-2));
+  color:var(--dsw-alias-label-secondary,var(--ms-text-dim));
+  border:1px solid var(--dsw-alias-border-l2,var(--ms-line-soft));
+  white-space:nowrap;
+}
+.flag-mode[aria-pressed="true"]{
+  background:var(--dsw-alias-state-business-primary,var(--ms-accent));
+  color:var(--dsw-alias-label-primary-foreground,#fff);
+  border-color:transparent;font-weight:600;
+}
+@media (max-width:520px){
+  body{padding:10px 8px 20px}
+  .title{font-size:17px}
+  .seg button{padding:8px 10px;font-size:12px}
+  .status{flex:1 1 100%;order:3;text-align:left}
+}
+@media (prefers-reduced-motion:reduce){
+  .cell,.restart{transition:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="head">
+    <h1 class="title">扫雷 <small>Minesweeper</small></h1>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <div class="seg" role="tablist" aria-label="难度选择">
+        <button type="button" data-level="beginner" class="active" role="tab">初级 9×9</button>
+        <button type="button" data-level="intermediate" role="tab">中级 16×16</button>
+        <button type="button" data-level="expert" role="tab">高级 16×30</button>
+      </div>
+      <button type="button" class="icon-btn" id="themeToggle" title="切换明暗主题">🌙 深色</button>
+    </div>
+  </div>
+
+  <div class="hud">
+    <div class="counter mines"><span class="k">剩余雷数</span><span class="v" id="mineCount">010</span></div>
+    <div class="status" id="status" role="status" aria-live="polite" data-state="idle">点击任意格子开始（首击及周围 8 格保证无雷）</div>
+    <div class="counter time"><span class="k">用时(秒)</span><span class="v" id="timer">000</span></div>
+    <button type="button" class="restart" id="restart"><span id="face">🙂</span> 重新开始</button>
+    <button type="button" class="cancel-jump" id="cancelJump" hidden>⛔ 停止跳转</button>
+  </div>
+
+  <div class="board-wrap">
+    <div class="board" id="board" role="grid" aria-label="扫雷棋盘"></div>
+  </div>
+
+  <div class="foot">
+    <p class="hint">
+      <kbd>左键</kbd> 翻开 · <kbd>右键</kbd> 插旗/取消 · <kbd>双击数字</kbd> 快速展开周围 8 格 ·
+      触屏：点按翻开，长按插旗，双击数字展开
+    </p>
+    <button type="button" class="flag-mode" id="flagMode" aria-pressed="false">🚩 标记模式：关</button>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ======================= 配置 ======================= */
+  var LEVELS = {
+    beginner:     { rows: 9,  cols: 9,  mines: 10 },
+    intermediate: { rows: 16, cols: 16, mines: 40 },
+    expert:       { rows: 16, cols: 30, mines: 99 }
+  };
+  var HIDDEN = 0, REVEALED = 1, FLAGGED = 2;
+
+  /* ============ 失败后自动跳转（彩蛋，可在下面直接改） ============ */
+  var REDIRECT = {
+    enabled: true,          // 总开关：false = 关掉跳转
+    urls: [
+      'https://b23.tv/gJKzzAV',
+      'https://b23.tv/J72tQfZ',
+      'https://b23.tv/tzoU9cp',
+      'https://b23.tv/aHy587q',
+      'https://b23.tv/zbn0prs',
+      'https://b23.tv/JDrqc8U',
+      'https://b23.tv/niH5vnR'
+    ],
+    delayMs: 5000,          // 踩雷后停留多久再跳（毫秒），留时间看清棋盘
+    target: 'self',         // 'self' = 当前标签页直接跳走；'blank' = 新标签页打开（原页面保留）
+    shuffleBag: true,       // true = 抽签袋：7 条链接随机轮流放，一轮内不重复
+    cancellable: true       // true = 倒计时期间显示「停止跳转」按钮
+  };
+  // URL 参数覆盖（方便分享和平时的安全测试）：
+  //   ?redirect=off  关闭跳转   ?redirect=on  开启
+  //   ?delay=3000    改停留时长  ?target=blank 新标签页打开  ?cancel=off 不给取消按钮
+  (function () {
+    try {
+      var q = new URLSearchParams(window.location.search);
+      if (q.get('redirect') === 'off') REDIRECT.enabled = false;
+      else if (q.get('redirect') === 'on') REDIRECT.enabled = true;
+      var d = parseInt(q.get('delay'), 10);
+      if (!isNaN(d) && d >= 0) REDIRECT.delayMs = d;
+      var t = q.get('target');
+      if (t === 'self' || t === 'blank') REDIRECT.target = t;
+      if (q.get('cancel') === 'off') REDIRECT.cancellable = false;
+    } catch (e) {}
+  })();
+
+  /* ======================= DOM ======================= */
+  var boardEl   = document.getElementById('board');
+  var wrapEl    = document.querySelector('.board-wrap');
+  var mineEl    = document.getElementById('mineCount');
+  var timeEl    = document.getElementById('timer');
+  var statusEl  = document.getElementById('status');
+  var faceEl    = document.getElementById('face');
+  var restartEl = document.getElementById('restart');
+  var jumpEl    = document.getElementById('cancelJump');
+  var flagBtn   = document.getElementById('flagMode');
+  var themeBtn  = document.getElementById('themeToggle');
+  var diffBtns  = [].slice.call(document.querySelectorAll('[data-level]'));
+
+  /* ======================= 状态 ======================= */
+  var level = 'beginner';
+  var rows = 0, cols = 0, mineTotal = 0;
+  var mine = [], adj = [], st = [], cells = [];
+  var started = false, over = false, won = false;
+  var revealedCount = 0, flagCount = 0, exploded = -1;
+  var t0 = 0, tickId = null;
+  var finalElapsed = 0;   // 终局时的用时快照，避免倒计时重绘时"用时"继续往上跳
+  var flagMode = false;
+
+  // 跳转彩蛋运行时状态
+  var jumpBag = [], jumpLastUrl = null, jumpTimer = null, jumpTick = null, jumpUrl = null, jumpWin = null, jumpDeadline = 0;
+
+  var lastTap = null, pressTimer = null, pressFired = false, pressIdx = -1, pressPt = null;
+
+  /* ======================= 工具 ======================= */
+  function rowOf(i) { return (i / cols) | 0; }
+  function colOf(i) { return i % cols; }
+
+  function neighborsOf(i) {
+    var r = rowOf(i), c = colOf(i), out = [], dr, dc, nr, nc;
+    for (dr = -1; dr <= 1; dr++) {
+      for (dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        nr = r + dr; nc = c + dc;
+        if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+        out.push(nr * cols + nc);
+      }
+    }
+    return out;
+  }
+
+  function pad3(n) {
+    n = Math.max(0, Math.min(999, n | 0));
+    return (n < 10 ? '00' : n < 100 ? '0' : '') + n;
+  }
+
+  function setStatus(text, state) {
+    statusEl.textContent = text;
+    statusEl.dataset.state = state || 'idle';
+  }
+
+  /* ======================= 计时器 ======================= */
+  function elapsedSec() { return t0 ? Math.floor((Date.now() - t0) / 1000) : 0; }
+
+  function paintTime() { timeEl.textContent = pad3(elapsedSec()); }
+
+  function startTimer() {
+    stopTimer();
+    t0 = Date.now();
+    paintTime();
+    tickId = setInterval(paintTime, 200);
+  }
+
+  function stopTimer() {
+    if (tickId !== null) { clearInterval(tickId); tickId = null; }
+    paintTime();
+  }
+
+  /* ======================= 渲染 ======================= */
+  function paintHud() {
+    var remain = mineTotal - flagCount;
+    mineEl.textContent = remain < 0 ? '-' + pad3(-remain).slice(1) : pad3(remain);
+    flagBtn.setAttribute('aria-pressed', flagMode ? 'true' : 'false');
+    flagBtn.textContent = flagMode ? '🚩 标记模式：开' : '🚩 标记模式：关';
+  }
+
+  function paintCell(i) {
+    var el = cells[i], s = st[i];
+    el.className = 'cell';
+    el.textContent = '';
+    if (over && !mine[i] && s === FLAGGED) {          // 插错的旗
+      el.className = 'cell flag wrong';
+      el.textContent = '🚩';
+      return;
+    }
+    if (s === FLAGGED) {
+      el.className = 'cell flag';
+      el.textContent = '🚩';
+      return;
+    }
+    if (s === REVEALED) {
+      if (mine[i]) {
+        el.className = 'cell mine' + (i === exploded ? ' exploded' : '');
+        el.textContent = i === exploded ? '💥' : '💣';
+        return;
+      }
+      el.className = 'cell open' + (adj[i] > 0 ? ' n' + adj[i] : '');
+      if (adj[i] > 0) el.textContent = String(adj[i]);
+      return;
+    }
+    el.className = 'cell cover';
+  }
+
+  function paintAll() {
+    for (var i = 0; i < st.length; i++) paintCell(i);
+  }
+
+  /* ======================= 布局尺寸 ======================= */
+  function layout() {
+    var gap = 2, pad = 16;
+    var rect = wrapEl.getBoundingClientRect();
+    var availW = rect.width || (window.innerWidth - 32);
+    var availH = window.innerHeight - (rect.top || 260) - 110;
+    var byW = (availW - pad - gap * (cols - 1)) / cols;
+    var byH = availH > 120 ? (availH - pad - gap * (rows - 1)) / rows : byW;
+    var size = Math.floor(Math.min(byW, byH));
+    if (!isFinite(size) || size < 16) size = 16;
+    if (size > 38) size = 38;
+    boardEl.style.setProperty('--cell', size + 'px');
+    boardEl.style.setProperty('--gap', gap + 'px');
+  }
+
+  /* ======================= 新局 ======================= */
+  function newGame(lv) {
+    if (lv && LEVELS[lv]) level = lv;
+    var cfg = LEVELS[level];
+    rows = cfg.rows; cols = cfg.cols; mineTotal = cfg.mines;
+
+    var total = rows * cols;
+    mine = new Uint8Array(total);
+    adj  = new Uint8Array(total);
+    st   = new Uint8Array(total);
+
+    started = false; over = false; won = false;
+    revealedCount = 0; flagCount = 0; exploded = -1;
+    t0 = 0; stopTimer(); finalElapsed = 0;
+    lastTap = null; clearPress();
+    cancelRedirect();          // 开新局时取消尚未执行的跳转
+
+    boardEl.style.setProperty('--cols', cols);
+    var frag = document.createDocumentFragment();
+    cells = new Array(total);
+    boardEl.innerHTML = '';
+    for (var i = 0; i < total; i++) {
+      var d = document.createElement('div');
+      d.className = 'cell cover';
+      d.dataset.i = i;
+      frag.appendChild(d);
+      cells[i] = d;
+    }
+    boardEl.appendChild(frag);
+
+    layout();
+    paintHud();
+    faceEl.textContent = '🙂';
+    setStatus('点击任意格子开始（首击及周围 8 格保证无雷）', 'idle');
+
+    for (var k = 0; k < diffBtns.length; k++) {
+      diffBtns[k].classList.toggle('active', diffBtns[k].dataset.level === level);
+    }
+  }
+
+  /* ======================= 布雷（首击安全） ======================= */
+  function placeMines(safeIndex) {
+    var total = rows * cols;
+    var forbidden = {};
+    forbidden[safeIndex] = true;
+    var nb = neighborsOf(safeIndex);
+    for (var k = 0; k < nb.length; k++) forbidden[nb[k]] = true;
+
+    var pool = [];
+    for (var i = 0; i < total; i++) if (!forbidden[i]) pool.push(i);
+
+    var need = Math.min(mineTotal, pool.length);
+    for (var m = 0; m < need; m++) {
+      var j = m + Math.floor(Math.random() * (pool.length - m));
+      var tmp = pool[m]; pool[m] = pool[j]; pool[j] = tmp;
+      mine[pool[m]] = 1;
+    }
+
+    for (var c = 0; c < total; c++) {
+      if (mine[c]) { adj[c] = 0; continue; }
+      var n2 = neighborsOf(c), cnt = 0;
+      for (var q = 0; q < n2.length; q++) if (mine[n2[q]]) cnt++;
+      adj[c] = cnt;
+    }
+  }
+
+  /* ======================= 核心操作 ======================= */
+  function openCell(i) {
+    if (over || st[i] !== HIDDEN) return;
+    if (!started) {
+      started = true;
+      placeMines(i);
+      startTimer();
+      setStatus('游戏进行中…', 'run');
+    }
+    if (mine[i]) { boom(i); return; }
+    flood(i);
+    checkWin();
+  }
+
+  function flood(start) {
+    var stack = [start], i, k, nb, n;
+    while (stack.length) {
+      i = stack.pop();
+      if (st[i] !== HIDDEN) continue;
+      st[i] = REVEALED;
+      revealedCount++;
+      paintCell(i);
+      if (adj[i] === 0) {
+        nb = neighborsOf(i);
+        for (k = 0; k < nb.length; k++) {
+          n = nb[k];
+          if (st[n] === HIDDEN) stack.push(n);
+        }
+      }
+    }
+  }
+
+  function toggleFlag(i) {
+    if (over) return;
+    if (st[i] === HIDDEN) { st[i] = FLAGGED; flagCount++; }
+    else if (st[i] === FLAGGED) { st[i] = HIDDEN; flagCount--; }
+    else return;
+    paintCell(i);
+    paintHud();
+  }
+
+  function chord(i) {
+    if (over || st[i] !== REVEALED || adj[i] === 0) return;
+    var nb = neighborsOf(i), k, f = 0;
+    for (k = 0; k < nb.length; k++) if (st[nb[k]] === FLAGGED) f++;
+    if (f !== adj[i]) return;
+    for (k = 0; k < nb.length; k++) {
+      var n = nb[k];
+      if (st[n] !== HIDDEN) continue;
+      if (mine[n]) { boom(n); return; }
+      openCell(n);
+      if (over) return;
+    }
+  }
+
+  function boom(i) {
+    over = true; won = false; exploded = i;
+    stopTimer();
+    finalElapsed = elapsedSec();          // 冻结用时
+    for (var k = 0; k < st.length; k++) {
+      if (mine[k] && st[k] === HIDDEN) st[k] = REVEALED;
+    }
+    paintAll();
+    faceEl.textContent = '😵';
+    setStatus('💥 踩到雷了！用时 ' + finalElapsed + ' 秒 —— 按「重新开始」或换难度再来一局', 'lose');
+    scheduleRedirect();   // 失败彩蛋：随机跳转
+  }
+
+  /* ======================= 失败后自动跳转 ======================= */
+  function pickRedirectUrl() {
+    var urls = REDIRECT.urls;
+    if (!urls || !urls.length) return null;
+    var picked, i, j, t, guard;
+
+    if (!REDIRECT.shuffleBag) {
+      picked = urls[Math.floor(Math.random() * urls.length)];
+      guard = 0;                                   // 纯随机模式也避开与上一次相同
+      while (urls.length > 1 && picked === jumpLastUrl && guard++ < 20) {
+        picked = urls[Math.floor(Math.random() * urls.length)];
+      }
+      jumpLastUrl = picked;
+      return picked;
+    }
+
+    // 抽签袋：洗完一轮才会重新洗牌，保证 7 条链接轮流出现、一轮内不重复
+    if (!jumpBag.length) {
+      jumpBag = urls.slice();
+      for (i = jumpBag.length - 1; i > 0; i--) {
+        j = Math.floor(Math.random() * (i + 1));
+        t = jumpBag[i]; jumpBag[i] = jumpBag[j]; jumpBag[j] = t;
+      }
+      // 跨轮防重复：袋尾就是下一轮第一个要发出的，若与上一轮最后一个相同就换走
+      if (jumpBag.length > 1 && jumpBag[jumpBag.length - 1] === jumpLastUrl) {
+        j = Math.floor(Math.random() * (jumpBag.length - 1));
+        t = jumpBag[jumpBag.length - 1]; jumpBag[jumpBag.length - 1] = jumpBag[j]; jumpBag[j] = t;
+      }
+    }
+    picked = jumpBag.pop();
+    jumpLastUrl = picked;
+    return picked;
+  }
+
+  function clearJumpTimers() {
+    if (jumpTimer !== null) { clearTimeout(jumpTimer); jumpTimer = null; }
+    if (jumpTick !== null) { clearInterval(jumpTick); jumpTick = null; }
+  }
+
+  // 用户主动取消 / 开新局：连预开的新标签页一起关掉
+  function cancelRedirect() {
+    clearJumpTimers();
+    if (jumpWin && !jumpWin.closed) { try { jumpWin.close(); } catch (e) {} }
+    jumpWin = null; jumpUrl = null;
+    jumpEl.hidden = true;
+    statusEl.dataset.jumping = '0';
+  }
+
+  function scheduleRedirect() {
+    cancelRedirect();
+    if (!REDIRECT.enabled) return;
+    var url = pickRedirectUrl();
+    if (!url) return;
+
+    jumpUrl = url;
+    jumpDeadline = Date.now() + REDIRECT.delayMs;
+
+    if (REDIRECT.target === 'blank') {
+      // 新标签页必须在用户手势（本次点击）内同步打开，否则会被浏览器弹窗拦截
+      try { jumpWin = window.open('', '_blank'); } catch (e) { jumpWin = null; }
+      if (!jumpWin) REDIRECT.target = 'self';
+    }
+
+    if (REDIRECT.cancellable) jumpEl.hidden = false;
+    statusEl.dataset.jumping = '1';
+
+    var paint = function () {
+      var left = Math.max(0, (jumpDeadline - Date.now()) / 1000);
+      setStatus('💥 踩到雷了！用时 ' + finalElapsed + ' 秒 —— ' +
+                left.toFixed(1) + ' 秒后自动跳转…', 'lose');
+    };
+    paint();
+    jumpTick = setInterval(paint, 100);
+
+    jumpTimer = setTimeout(function () {
+      var target = jumpUrl;
+      clearJumpTimers();                 // 注意：不清 jumpWin，待会儿要用它导航
+      jumpEl.hidden = true;
+      statusEl.dataset.jumping = '0';
+      jumpUrl = null;
+      doRedirect(target);
+    }, REDIRECT.delayMs);
+  }
+
+  function doRedirect(url) {
+    if (!url) return;
+    if (REDIRECT.target === 'blank' && jumpWin && !jumpWin.closed) {
+      try { jumpWin.location.href = url; jumpWin = null; return; } catch (e) {}
+    }
+    if (REDIRECT.target === 'blank' && window.open(url, '_blank')) return;
+    window.location.href = url;          // 兜底：当前标签页跳转
+  }
+
+  function checkWin() {
+    if (revealedCount !== rows * cols - mineTotal) return;
+    over = true; won = true;
+    stopTimer();
+    finalElapsed = elapsedSec();          // 冻结用时
+    for (var k = 0; k < st.length; k++) {
+      if (mine[k] && st[k] === HIDDEN) { st[k] = FLAGGED; flagCount++; }
+    }
+    paintAll();
+    paintHud();
+    faceEl.textContent = '😎';
+    setStatus('🎉 胜利！全部非雷格已翻开，用时 ' + elapsedSec() + ' 秒', 'win');
+  }
+
+  /* ======================= 指针交互 ======================= */
+  function cellFromEvent(e) {
+    var t = e.target;
+    while (t && t !== boardEl) {
+      if (t.classList && t.classList.contains('cell')) return +t.dataset.i;
+      t = t.parentNode;
+    }
+    return -1;
+  }
+
+  function clearPress() {
+    if (pressTimer !== null) { clearTimeout(pressTimer); pressTimer = null; }
+    pressFired = false;
+    pressPt = null;
+    pressIdx = -1;
+  }
+
+  boardEl.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+  boardEl.addEventListener('pointerdown', function (e) {
+    if (over) return;
+    var i = cellFromEvent(e);
+    if (i < 0) return;
+
+    if (e.pointerType === 'mouse') {
+      if (e.button === 2) { e.preventDefault(); toggleFlag(i); }
+      return;
+    }
+    // 触屏 / 触控笔：长按插旗
+    pressIdx = i;
+    pressPt = { x: e.clientX, y: e.clientY };
+    pressFired = false;
+    if (pressTimer !== null) clearTimeout(pressTimer);
+    pressTimer = setTimeout(function () {
+      pressTimer = null;
+      pressFired = true;
+      toggleFlag(pressIdx);
+      if (navigator.vibrate) { try { navigator.vibrate(15); } catch (err) {} }
+    }, 420);
+  });
+
+  boardEl.addEventListener('pointermove', function (e) {
+    if (!pressPt) return;
+    if (Math.abs(e.clientX - pressPt.x) > 10 || Math.abs(e.clientY - pressPt.y) > 10) clearPress();
+  });
+
+  boardEl.addEventListener('pointercancel', clearPress);
+
+  boardEl.addEventListener('pointerup', function (e) {
+    var fired = pressFired;
+    if (pressTimer !== null) { clearTimeout(pressTimer); pressTimer = null; }
+    pressFired = false;
+    pressPt = null;
+    if (fired) return;                       // 长按已处理
+    if (over) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    var i = cellFromEvent(e);
+    if (i < 0) return;
+
+    var now = (window.performance && performance.now) ? performance.now() : Date.now();
+    var dbl = !!lastTap && lastTap.i === i && (now - lastTap.t) < 400;
+    lastTap = dbl ? null : { i: i, t: now };
+    if (dbl) chord(i);
+    else handlePrimary(i);
+  });
+
+  function handlePrimary(i) {
+    if (over) return;
+    if (flagMode) { toggleFlag(i); return; }
+    if (st[i] === FLAGGED) return;
+    openCell(i);
+  }
+
+  /* ======================= 控件 ======================= */
+  restartEl.addEventListener('click', function () { newGame(); });
+
+  jumpEl.addEventListener('click', function () {
+    cancelRedirect();
+    setStatus('已取消跳转 —— 按「重新开始」或换难度再来一局', 'lose');
+  });
+
+  for (var b = 0; b < diffBtns.length; b++) {
+    diffBtns[b].addEventListener('click', function () { newGame(this.dataset.level); });
+  }
+
+  flagBtn.addEventListener('click', function () {
+    flagMode = !flagMode;
+    paintHud();
+  });
+
+  window.addEventListener('resize', function () { layout(); });
+  window.addEventListener('orientationchange', function () { setTimeout(layout, 150); });
+
+  /* ======================= 主题 ======================= */
+  function hostProvidesTokens() {
+    try {
+      return !!getComputedStyle(document.body).getPropertyValue('--dsw-alias-bg-base').trim();
+    } catch (e) { return false; }
+  }
+
+  function applyTheme(mode) {
+    document.documentElement.setAttribute('data-theme', mode);
+    themeBtn.textContent = mode === 'dark' ? '☀️ 浅色' : '🌙 深色';
+  }
+
+  function savedTheme() {
+    try {
+      var v = localStorage.getItem('ms-theme');
+      return (v === 'dark' || v === 'light') ? v : null;
+    } catch (e) { return null; }
+  }
+
+  function systemTheme() {
+    return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  }
+
+  function onThemeClick() {
+    var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    try { localStorage.setItem('ms-theme', next); } catch (e) {}
+  }
+
+  // 宿主令牌可能晚于本脚本加载，因此在 DOMContentLoaded / load 时再校准一次
+  function recheckHostTheme() {
+    if (hostProvidesTokens()) {
+      document.documentElement.removeAttribute('data-theme');
+      themeBtn.hidden = true;
+    } else if (themeBtn.hidden) {
+      themeBtn.hidden = false;
+      applyTheme(savedTheme() || systemTheme());
+    }
+  }
+
+  function initTheme() {
+    if (hostProvidesTokens()) {
+      document.documentElement.removeAttribute('data-theme');
+      themeBtn.hidden = true;
+    } else {
+      themeBtn.hidden = false;
+      applyTheme(savedTheme() || systemTheme());
+    }
+    themeBtn.addEventListener('click', onThemeClick);
+    document.addEventListener('DOMContentLoaded', recheckHostTheme);
+    window.addEventListener('load', recheckHostTheme);
+  }
+
+  /* ======================= 启动 ======================= */
+  initTheme();
+  newGame('beginner');
+  requestAnimationFrame(layout);
+  window.addEventListener('load', function () { requestAnimationFrame(layout); });
+
+  // 便于自动化测试与调试
+  window.__minesweeper = {
+    newGame: newGame,
+    redirect: REDIRECT,                       // 运行时可改：__minesweeper.redirect.enabled = false
+    pendingJump: function () {
+      return { url: jumpUrl, deadline: jumpDeadline, bagLeft: jumpBag.slice() };
+    },
+    cancelJump: cancelRedirect,
+    state: function () {
+      return {
+        level: level, rows: rows, cols: cols, mines: mineTotal,
+        started: started, over: over, won: won,
+        revealed: revealedCount, flags: flagCount, exploded: exploded,
+        elapsed: over ? finalElapsed : elapsedSec(),
+        mine: Array.prototype.slice.call(mine),
+        adj: Array.prototype.slice.call(adj),
+        st: Array.prototype.slice.call(st),
+        minesPlaced: (function () {
+          var n = 0;
+          for (var i = 0; i < mine.length; i++) n += mine[i];
+          return n;
+        })()
+      };
+    },
+    open: openCell,
+    flag: toggleFlag,
+    chord: chord
+  };
+})();
+</script>
+</body>
+</html>
