@@ -161,6 +161,18 @@ body{
 }
 .restart:hover{filter:brightness(1.08)}
 .restart:active{transform:translateY(1px)}
+.cancel-jump{
+  font:inherit;font-size:13px;font-weight:600;padding:9px 14px;border-radius:10px;cursor:pointer;
+  border:1px solid var(--dsw-alias-border-l3,var(--ms-line));
+  background:var(--dsw-alias-bg-overlay,var(--ms-surface-2));
+  color:var(--dsw-alias-label-secondary,var(--ms-text-dim));
+  white-space:nowrap;transition:background-color .12s;
+}
+.cancel-jump:hover{background:var(--dsw-alias-interactive-bg-hover,var(--ms-line-soft))}
+.cancel-jump[hidden]{display:none}
+@keyframes ms-jump-pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.status[data-state="lose"][data-jumping="1"]{animation:ms-jump-pulse 1s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.status[data-jumping="1"]{animation:none}}
 
 /* ---------- 棋盘 ---------- */
 .board-wrap{
@@ -301,6 +313,7 @@ body[data-ds-dark-theme] .cell.cover,
     <div class="status" id="status" role="status" aria-live="polite" data-state="idle">点击任意格子开始（首击及周围 8 格保证无雷）</div>
     <div class="counter time"><span class="k">用时(秒)</span><span class="v" id="timer">000</span></div>
     <button type="button" class="restart" id="restart"><span id="face">🙂</span> 重新开始</button>
+    <button type="button" class="cancel-jump" id="cancelJump" hidden>⛔ 停止跳转</button>
   </div>
 
   <div class="board-wrap">
@@ -329,6 +342,39 @@ body[data-ds-dark-theme] .cell.cover,
   };
   var HIDDEN = 0, REVEALED = 1, FLAGGED = 2;
 
+  /* ============ 失败后自动跳转（彩蛋，可在下面直接改） ============ */
+  var REDIRECT = {
+    enabled: true,          // 总开关：false = 关掉跳转
+    urls: [
+      'https://b23.tv/gJKzzAV',
+      'https://b23.tv/J72tQfZ',
+      'https://b23.tv/tzoU9cp',
+      'https://b23.tv/aHy587q',
+      'https://b23.tv/zbn0prs',
+      'https://b23.tv/JDrqc8U',
+      'https://b23.tv/niH5vnR'
+    ],
+    delayMs: 1500,          // 踩雷后停留多久再跳（毫秒），留时间看清棋盘
+    target: 'self',         // 'self' = 当前标签页直接跳走；'blank' = 新标签页打开（原页面保留）
+    shuffleBag: true,       // true = 抽签袋：7 条链接随机轮流放，一轮内不重复
+    cancellable: true       // true = 倒计时期间显示「停止跳转」按钮
+  };
+  // URL 参数覆盖（方便分享和平时的安全测试）：
+  //   ?redirect=off  关闭跳转   ?redirect=on  开启
+  //   ?delay=3000    改停留时长  ?target=blank 新标签页打开  ?cancel=off 不给取消按钮
+  (function () {
+    try {
+      var q = new URLSearchParams(window.location.search);
+      if (q.get('redirect') === 'off') REDIRECT.enabled = false;
+      else if (q.get('redirect') === 'on') REDIRECT.enabled = true;
+      var d = parseInt(q.get('delay'), 10);
+      if (!isNaN(d) && d >= 0) REDIRECT.delayMs = d;
+      var t = q.get('target');
+      if (t === 'self' || t === 'blank') REDIRECT.target = t;
+      if (q.get('cancel') === 'off') REDIRECT.cancellable = false;
+    } catch (e) {}
+  })();
+
   /* ======================= DOM ======================= */
   var boardEl   = document.getElementById('board');
   var wrapEl    = document.querySelector('.board-wrap');
@@ -337,6 +383,7 @@ body[data-ds-dark-theme] .cell.cover,
   var statusEl  = document.getElementById('status');
   var faceEl    = document.getElementById('face');
   var restartEl = document.getElementById('restart');
+  var jumpEl    = document.getElementById('cancelJump');
   var flagBtn   = document.getElementById('flagMode');
   var themeBtn  = document.getElementById('themeToggle');
   var diffBtns  = [].slice.call(document.querySelectorAll('[data-level]'));
@@ -348,7 +395,11 @@ body[data-ds-dark-theme] .cell.cover,
   var started = false, over = false, won = false;
   var revealedCount = 0, flagCount = 0, exploded = -1;
   var t0 = 0, tickId = null;
+  var finalElapsed = 0;   // 终局时的用时快照，避免倒计时重绘时"用时"继续往上跳
   var flagMode = false;
+
+  // 跳转彩蛋运行时状态
+  var jumpBag = [], jumpLastUrl = null, jumpTimer = null, jumpTick = null, jumpUrl = null, jumpWin = null, jumpDeadline = 0;
 
   var lastTap = null, pressTimer = null, pressFired = false, pressIdx = -1, pressPt = null;
 
@@ -463,8 +514,9 @@ body[data-ds-dark-theme] .cell.cover,
 
     started = false; over = false; won = false;
     revealedCount = 0; flagCount = 0; exploded = -1;
-    t0 = 0; stopTimer();
+    t0 = 0; stopTimer(); finalElapsed = 0;
     lastTap = null; clearPress();
+    cancelRedirect();          // 开新局时取消尚未执行的跳转
 
     boardEl.style.setProperty('--cols', cols);
     var frag = document.createDocumentFragment();
@@ -573,18 +625,114 @@ body[data-ds-dark-theme] .cell.cover,
   function boom(i) {
     over = true; won = false; exploded = i;
     stopTimer();
+    finalElapsed = elapsedSec();          // 冻结用时
     for (var k = 0; k < st.length; k++) {
       if (mine[k] && st[k] === HIDDEN) st[k] = REVEALED;
     }
     paintAll();
     faceEl.textContent = '😵';
-    setStatus('💥 踩到雷了！用时 ' + elapsedSec() + ' 秒 —— 按「重新开始」或换难度再来一局', 'lose');
+    setStatus('💥 踩到雷了！用时 ' + finalElapsed + ' 秒 —— 按「重新开始」或换难度再来一局', 'lose');
+    scheduleRedirect();   // 失败彩蛋：随机跳转
+  }
+
+  /* ======================= 失败后自动跳转 ======================= */
+  function pickRedirectUrl() {
+    var urls = REDIRECT.urls;
+    if (!urls || !urls.length) return null;
+    var picked, i, j, t, guard;
+
+    if (!REDIRECT.shuffleBag) {
+      picked = urls[Math.floor(Math.random() * urls.length)];
+      guard = 0;                                   // 纯随机模式也避开与上一次相同
+      while (urls.length > 1 && picked === jumpLastUrl && guard++ < 20) {
+        picked = urls[Math.floor(Math.random() * urls.length)];
+      }
+      jumpLastUrl = picked;
+      return picked;
+    }
+
+    // 抽签袋：洗完一轮才会重新洗牌，保证 7 条链接轮流出现、一轮内不重复
+    if (!jumpBag.length) {
+      jumpBag = urls.slice();
+      for (i = jumpBag.length - 1; i > 0; i--) {
+        j = Math.floor(Math.random() * (i + 1));
+        t = jumpBag[i]; jumpBag[i] = jumpBag[j]; jumpBag[j] = t;
+      }
+      // 跨轮防重复：袋尾就是下一轮第一个要发出的，若与上一轮最后一个相同就换走
+      if (jumpBag.length > 1 && jumpBag[jumpBag.length - 1] === jumpLastUrl) {
+        j = Math.floor(Math.random() * (jumpBag.length - 1));
+        t = jumpBag[jumpBag.length - 1]; jumpBag[jumpBag.length - 1] = jumpBag[j]; jumpBag[j] = t;
+      }
+    }
+    picked = jumpBag.pop();
+    jumpLastUrl = picked;
+    return picked;
+  }
+
+  function clearJumpTimers() {
+    if (jumpTimer !== null) { clearTimeout(jumpTimer); jumpTimer = null; }
+    if (jumpTick !== null) { clearInterval(jumpTick); jumpTick = null; }
+  }
+
+  // 用户主动取消 / 开新局：连预开的新标签页一起关掉
+  function cancelRedirect() {
+    clearJumpTimers();
+    if (jumpWin && !jumpWin.closed) { try { jumpWin.close(); } catch (e) {} }
+    jumpWin = null; jumpUrl = null;
+    jumpEl.hidden = true;
+    statusEl.dataset.jumping = '0';
+  }
+
+  function scheduleRedirect() {
+    cancelRedirect();
+    if (!REDIRECT.enabled) return;
+    var url = pickRedirectUrl();
+    if (!url) return;
+
+    jumpUrl = url;
+    jumpDeadline = Date.now() + REDIRECT.delayMs;
+
+    if (REDIRECT.target === 'blank') {
+      // 新标签页必须在用户手势（本次点击）内同步打开，否则会被浏览器弹窗拦截
+      try { jumpWin = window.open('', '_blank'); } catch (e) { jumpWin = null; }
+      if (!jumpWin) REDIRECT.target = 'self';
+    }
+
+    if (REDIRECT.cancellable) jumpEl.hidden = false;
+    statusEl.dataset.jumping = '1';
+
+    var paint = function () {
+      var left = Math.max(0, (jumpDeadline - Date.now()) / 1000);
+      setStatus('💥 踩到雷了！用时 ' + finalElapsed + ' 秒 —— ' +
+                left.toFixed(1) + ' 秒后自动跳转…', 'lose');
+    };
+    paint();
+    jumpTick = setInterval(paint, 100);
+
+    jumpTimer = setTimeout(function () {
+      var target = jumpUrl;
+      clearJumpTimers();                 // 注意：不清 jumpWin，待会儿要用它导航
+      jumpEl.hidden = true;
+      statusEl.dataset.jumping = '0';
+      jumpUrl = null;
+      doRedirect(target);
+    }, REDIRECT.delayMs);
+  }
+
+  function doRedirect(url) {
+    if (!url) return;
+    if (REDIRECT.target === 'blank' && jumpWin && !jumpWin.closed) {
+      try { jumpWin.location.href = url; jumpWin = null; return; } catch (e) {}
+    }
+    if (REDIRECT.target === 'blank' && window.open(url, '_blank')) return;
+    window.location.href = url;          // 兜底：当前标签页跳转
   }
 
   function checkWin() {
     if (revealedCount !== rows * cols - mineTotal) return;
     over = true; won = true;
     stopTimer();
+    finalElapsed = elapsedSec();          // 冻结用时
     for (var k = 0; k < st.length; k++) {
       if (mine[k] && st[k] === HIDDEN) { st[k] = FLAGGED; flagCount++; }
     }
@@ -670,6 +818,11 @@ body[data-ds-dark-theme] .cell.cover,
   /* ======================= 控件 ======================= */
   restartEl.addEventListener('click', function () { newGame(); });
 
+  jumpEl.addEventListener('click', function () {
+    cancelRedirect();
+    setStatus('已取消跳转 —— 按「重新开始」或换难度再来一局', 'lose');
+  });
+
   for (var b = 0; b < diffBtns.length; b++) {
     diffBtns[b].addEventListener('click', function () { newGame(this.dataset.level); });
   }
@@ -744,12 +897,17 @@ body[data-ds-dark-theme] .cell.cover,
   // 便于自动化测试与调试
   window.__minesweeper = {
     newGame: newGame,
+    redirect: REDIRECT,                       // 运行时可改：__minesweeper.redirect.enabled = false
+    pendingJump: function () {
+      return { url: jumpUrl, deadline: jumpDeadline, bagLeft: jumpBag.slice() };
+    },
+    cancelJump: cancelRedirect,
     state: function () {
       return {
         level: level, rows: rows, cols: cols, mines: mineTotal,
         started: started, over: over, won: won,
         revealed: revealedCount, flags: flagCount, exploded: exploded,
-        elapsed: elapsedSec(),
+        elapsed: over ? finalElapsed : elapsedSec(),
         mine: Array.prototype.slice.call(mine),
         adj: Array.prototype.slice.call(adj),
         st: Array.prototype.slice.call(st),

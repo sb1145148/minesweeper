@@ -1,24 +1,28 @@
-# 扫雷 Minesweeper（纯静态）
+# 扫雷 Minesweeper v2.0（彩蛋版）
 
-原生 HTML + CSS + JavaScript 实现的扫雷游戏。**零依赖、零构建、零网络请求**，双击 `index.html` 即可运行，也可直接推送到 GitHub Pages 等任意静态托管平台。
+原生 HTML + CSS + JavaScript 实现的扫雷游戏，**加了一个"失败后自动跳转"的彩蛋**。零依赖、零构建，双击 `index.html` 即可运行。
+
+> **本分支是 v2.0。** 纯扫雷的 v1.0 在 [`main`](../../tree/main) 分支，线上地址 <https://sb1145148.github.io/minesweeper/>。
+> 本分支线上地址：<https://sb1145148.github.io/minesweeper/v2/>
 
 ## 文件
 
 | 文件 | 说明 |
 | --- | --- |
-| `index.html` | 全部内容（结构 / 样式 / 游戏逻辑内联在单文件中） |
+| `index.html` | 游戏本体，结构 / 样式 / 逻辑全部内联在单文件里 |
 | `README.md` | 本说明 |
+| `CHANGELOG.md` | v2.0 相对 v1.0 增加了什么的详细记录 |
+
+`index.html` 与 v1.0 的差异：**只多了彩蛋相关的代码**（+140 行左右），原有游戏逻辑一行未改，扫雷玩法与 v1.0 完全一致。
 
 ## 运行方式
 
-1. **本地直接运行**：双击 `index.html`，用任意现代浏览器打开即可（file:// 协议下功能完整）。
+1. **本地直接运行**：双击 `index.html`，用任意现代浏览器打开即可（`file://` 协议下功能完整）。
 2. **本地起静态服务（可选）**：
    ```bash
-   cd 本目录
    python3 -m http.server 8000
    # 浏览器打开 http://localhost:8000
    ```
-   仅用 `python3`/`npx serve` 这类静态文件服务即可，项目本身不需要任何后端。
 
 ## 玩法
 
@@ -37,49 +41,95 @@
 - 翻开所有非雷格即胜利；踩到雷即失败并展示全部地雷（错误插旗会高亮）。
 - 计时器在首次点击时启动，胜利 / 失败时停止。
 
+## 彩蛋：失败后自动跳转
+
+踩到雷后，棋盘先展示完整的爆炸现场，停留 **1.5 秒**，随后**随机跳转到 7 条 b23.tv 链接中的一条**。
+
+| # | 短链 |
+| --- | --- |
+| 1 | https://b23.tv/gJKzzAV |
+| 2 | https://b23.tv/J72tQfZ |
+| 3 | https://b23.tv/tzoU9cp |
+| 4 | https://b23.tv/aHy587q |
+| 5 | https://b23.tv/zbn0prs |
+| 6 | https://b23.tv/JDrqc8U |
+| 7 | https://b23.tv/niH5vnR |
+
+配置项集中在 `index.html` 顶部的 `REDIRECT` 对象里：
+
+```js
+var REDIRECT = {
+  enabled: true,        // 总开关，false = 关掉跳转
+  urls: [ /* 7 条 b23.tv 链接 */ ],
+  delayMs: 1500,        // 踩雷后停留多久再跳（毫秒，当前 1.5 秒）
+  target: 'self',       // 'self' = 当前页跳走；'blank' = 新标签页打开（原页保留）
+  shuffleBag: true,     // true = 抽签袋：随机轮流，绝不会连着两次跳同一个
+  cancellable: true     // true = 倒计时期间显示「停止跳转」按钮
+};
+```
+
+几条最常改的：
+
+- **想更狠**：`cancellable: false`（不给取消按钮）+ `delayMs: 600`（几乎秒跳）。
+- **想温和一点**：`target: 'blank'`，只开新标签页，玩家原来的游戏页面还在。
+- **想彻底关掉**：`enabled: false`。
+
+### 随机策略：抽签袋
+
+每轮把 7 条链接洗牌后依次取用，取完再洗下一轮；洗新轮时如果袋尾（下一轮第一个要发的）与上一次相同，就把它换到袋内其他位置。因此**既随机，又绝不会连着两次跳到同一个链接**（轮内不重复 + 跨轮不重复）。
+
+### URL 参数
+
+运行时可以用 URL 参数覆盖，不用改代码：
+
+| 参数 | 作用 |
+| --- | --- |
+| `?redirect=off` | 关闭跳转（分享"安全版"或做自动化测试时用） |
+| `?redirect=on` | 强制开启 |
+| `?delay=3000` | 改停留时长 |
+| `?target=blank` | 用新标签页打开，保留游戏页面 |
+| `?cancel=off` | 不给「停止跳转」按钮 |
+
+可以组合：`?target=blank&delay=800&cancel=off`。
+
+### 交互细节
+
+- 只在**失败**时触发，胜利不跳。
+- 倒计时期间状态栏显示剩余秒数并呼吸闪烁，旁边出现「⛔ 停止跳转」按钮（`cancellable: true` 时）。
+- 倒计时里的"用时"是**踩雷瞬间的冻结值**，不会随倒计时重绘而继续增长。
+- 点「重新开始」或切换难度会**取消**尚未执行的跳转。
+- `target: 'blank'` 时会在点击的同一个手势里预开一个空白标签页，倒计时结束后再让它导航过去——否则会被浏览器当作弹窗拦截。
+- 默认的 `target: 'self'` 走 `location.href`，属于正常页面导航，弹窗拦截器拦不住。
+
+> ⚠️「停止跳转」按钮是故意留的（`cancellable: true`）。它是这个整活功能唯一的"逃生出口"，也让手机用户不至于被卡住。想要纯粹的整蛊效果，把它设为 `false` 即可。
+
 ## 主题
 
-配色以 DeepSeek Harness 的主题变量 `--dsw-alias-*`（配合 `--dsw-static-*`）为首选色源，本文件**不覆盖任何 `--dsw-*` 变量**，所有引用都写成
-`var(--dsw-alias-xxx, <内置兜底值>)`：
+配色以 DeepSeek Harness 的主题变量 `--dsw-alias-*`（配合 `--dsw-static-*`）为首选色源，文件**不覆盖任何 `--dsw-*` 变量**，所有引用都写成 `var(--dsw-alias-xxx, <内置兜底值>)`：
 
 - **嵌入 DSH 运行时**：自动继承宿主明暗主题，并隐藏「深色/浅色」切换按钮（由宿主控制）。
 - **独立打开**：使用内置的明暗兜底配色，跟随系统 `prefers-color-scheme`，也可用右上角按钮手动切换（记忆在 `localStorage`）。
 
-## 部署到 GitHub Pages
+## 部署说明
 
-```bash
-# 1. 在项目目录初始化仓库
-git init
-git add index.html README.md
-git commit -m "feat: 纯静态扫雷"
-git branch -M main
+本仓库用 GitHub Actions 合并发布两个分支（见 `main` 分支的 `.github/workflows/pages.yml`）：
 
-# 2. 关联远端并推送
-git remote add origin https://github.com/<你的用户名>/<仓库名>.git
-git push -u origin main
+```
+main 分支 → 站点根路径     https://sb1145148.github.io/minesweeper/
+v2   分支 → /v2/ 子路径    https://sb1145148.github.io/minesweeper/v2/
 ```
 
-然后在 GitHub 仓库页面：**Settings → Pages → Build and deployment**
-- Source 选 `Deploy from a branch`
-- Branch 选 `main`，目录选 `/ (root)`，Save
-
-等 1 分钟左右，访问 `https://<你的用户名>.github.io/<仓库名>/` 即可。
-（入口文件名必须是 `index.html`，本仓库已满足，无需额外配置。）
-
-其他静态托管平台（Cloudflare Pages、Vercel、Netlify、Gitee Pages 等）同样是"选择仓库 → 无需构建命令 → 输出目录填 `/`"即可。
+推送到 `main` 或 `v2` 任一分支都会触发重新发布。
 
 ## 自测结果
 
-使用 Chromium（Playwright）以 `file://` 方式加载真实页面，共 **63 项断言全部通过**：
+用 Chromium（Playwright）加载真实页面跑自动化验收：
 
-| 验收标准 | 结果 |
+| 套件 | 结果 |
 | --- | --- |
-| 1. 三种难度开局、棋盘尺寸与雷数、切换难度立即重开 | ✅ 9×9/81格/10雷、16×16/256格/40雷、16×30/480格/99雷 |
-| 2. 首击安全（每难度 25 次随机首击，共 75 次） | ✅ 首击格及周围 8 格均无雷，布雷总数正确 |
-| 3. 右键插旗 / 取消，剩余雷数同步 | ✅ 010 → 009 → 008 → 007 → 008 → 010 |
-| 4. 0 格递归展开 | ✅ 多轮随机验证，0 区域及其边界全部自动展开 |
-| 5. 胜利 / 失败判定 | ✅ 翻开全部非雷格提示胜利；踩雷提示失败并展示全部地雷 |
-| 6. 计时器启停 | ✅ 首击开始计时；胜/负后计时停止（等待 1.6s 数值不变） |
-| 附加：双击数字 chord 展开、重新开始、移动端点按/布局 | ✅ |
-| 附加：无外部网络请求、无 `<script src>`/`<link href>` 外链、无 JS 报错 | ✅ |
-| 附加：注入 DSH 主题令牌后配色跟随宿主、宿主内自动隐藏主题按钮 | ✅ |
+| v1.0 游戏本体 | ✅ 64/64 |
+| v2.0 游戏本体 | ✅ 64/64 |
+| v2.0 跳转彩蛋 | ✅ 40/40（随机性检查 28 次 / 4 轮，轮内与跨轮均无重复） |
+| 主题跟随 DSH 令牌 | ✅ |
+
+彩蛋部分覆盖：`?redirect=off` 不跳转、倒计时递减、取消生效、重启/换难度清空待跳转、胜利不跳、28 次跳转覆盖 7 条链接各 4 次且无连续重复、`?target=blank` 新标签页、真实导航到 b23.tv、`?cancel=off` 不显示按钮但照常跳转。7 条短链均已实测可正常解析（HTTP 200，分别指向 7 个不同的 B 站视频）。
