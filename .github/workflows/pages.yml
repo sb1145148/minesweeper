@@ -1,0 +1,50 @@
+name: Deploy Pages (v1.0 + v2.0)
+
+on:
+  push:
+    branches: [main, v2]      # 两个分支任一更新都重新发布
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取出 main（v1.0）
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: site
+
+      - name: 取出 v2（v2.0）放到 /v2/
+        uses: actions/checkout@v4
+        with:
+          ref: v2
+          path: site/v2
+
+      - name: 清理 v2 子目录里的仓库文件
+        run: rm -rf site/v2/.github
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
