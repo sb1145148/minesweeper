@@ -83,3 +83,7 @@ git push -u origin main
 | 附加：双击数字 chord 展开、重新开始、移动端点按/布局 | ✅ |
 | 附加：无外部网络请求、无 `<script src>`/`<link href>` 外链、无 JS 报错 | ✅ |
 | 附加：注入 DSH 主题令牌后配色跟随宿主、宿主内自动隐藏主题按钮 | ✅ |
+
+## 许可
+
+([LICENSE](LICENSE))
